@@ -1,46 +1,140 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:recipe/consent/colors.dart';
-import 'package:recipe/userAuth/home.dart';
 
 class Recipe extends StatefulWidget {
-  final String recipeName;
-  final String imagePath;
-  // Add other recipe details here
+  final String recipeId;
 
-  Recipe({required this.recipeName, required this.imagePath});
+  Recipe({required this.recipeId});
 
   @override
   _RecipeState createState() => _RecipeState();
 }
 
 class _RecipeState extends State<Recipe> {
-  TextEditingController _ingredientsController = TextEditingController();
-  TextEditingController _recipeDetailsController = TextEditingController();
-  bool _isEditingIngredients = false;
-  bool _isEditingRecipe = false;
+  late YoutubePlayerController _controller;
+  late DocumentSnapshot _recipe;
+  bool _isFavorite = false;
+  bool _isEditing = false;
+  late TextEditingController _ingredientsController;
+  late TextEditingController _instructionsController;
 
   @override
   void initState() {
     super.initState();
-    _ingredientsController.text = "1 ekor ayam kampung\n1 ruas jahe, geprek\nBumbu ungkep :\n4 siung bawang merah\n2 siung bawang putih\n2 buah kemiri\n1 sdt ketumbar \n1/2 sdt merica \n1 ruas jahe \n1 ruas kunyit \n3 sdm gula merah sisir \n7 sdm kecap manis \n2 daun salam \nsecukupnya Garam & kaldu bubuk";
-    _recipeDetailsController.text = "1. Cuci bersih ayam. Kemudian rebus sebentar pake jahe geprek\n2. Haluskan semua bumbu ungkep kecuali gula, garam, kecap, dan daun salam. Kemudian tumis dengan sedikit minyak sampai harum. Masukkan gula garam & daun salam nya. Beri air sedikit agar gula cepet larut.\n3. Masukkan ayam nya. Aduk rata & masak sebentar sampai bumbu agak meresap. Kemudian beri air kira2 2 gelas. Beri kecap dan aduk rata. Oya saya rekomendasikan pake kecap cap bango ya biar warna nya lebih cantik :)\n4. Biarkan sampai air menyusut sambil sesekali diaduk2. Angkat.\n5. Panaskan teflon. Bakar ayam pake api kecil saja. Bakar sampai permukaan ayam terlihat mengkaramel & kecoklatan. Angkat.\n6. Ayam bakar siap disajikan. Makan bersama sambel goreng dan lalapan.";
+    fetchRecipe();
+  }
+
+  Future<void> fetchRecipe() async {
+    var recipeDoc = await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(widget.recipeId)
+        .get();
+    setState(() {
+      _recipe = recipeDoc;
+      _isFavorite = _recipe['favoriteState'];
+      _ingredientsController = TextEditingController(text: _recipe['ingredients']);
+      _instructionsController = TextEditingController(text: _recipe['instructions']);
+
+      try {
+        _controller = YoutubePlayerController(
+          initialVideoId: YoutubePlayer.convertUrlToId(_recipe['videoUrl'])!,
+          flags: YoutubePlayerFlags(
+            autoPlay: true,
+            mute: false,
+          ),
+        );
+      } catch (e) {
+        // Handle the error by setting a placeholder image or thumbnail
+        _controller = YoutubePlayerController(
+          initialVideoId: 'error', // This will not play any video
+          flags: YoutubePlayerFlags(
+            autoPlay: false,
+            mute: false,
+          ),
+        );
+      }
+    });
+  }
+
+  void toggleFavorite() async {
+    setState(() {
+      _isFavorite = !_isFavorite;
+    });
+    await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(widget.recipeId)
+        .update({'favoriteState': _isFavorite});
+  }
+
+  void toggleEdit() {
+    setState(() {
+      _isEditing = !_isEditing;
+    });
+  }
+
+  Future<void> saveChanges() async {
+    await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(widget.recipeId)
+        .update({
+      'ingredients': _ingredientsController.text,
+      'instructions': _instructionsController.text,
+    });
+    toggleEdit();
+  }
+
+  Future<void> deleteRecipe() async {
+    bool confirmDelete = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Recipe'),
+        content: Text('Are you sure you want to delete this recipe?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmDelete) {
+      await FirebaseFirestore.instance
+          .collection('recipes')
+          .doc(widget.recipeId)
+          .delete();
+      Navigator.of(context).pop(); // Close the recipe page after deletion
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_recipe == null) return CircularProgressIndicator();
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: background,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
               automaticallyImplyLeading: false,
-              backgroundColor: Colors.white,
+              backgroundColor: background,
               expandedHeight: 400,
               flexibleSpace: FlexibleSpaceBar(
-                background: Image.asset(
-                  widget.imagePath,
+                background: _controller.initialVideoId == 'error'
+                    ? Image.asset(
+                  'images/nofood.png',
                   fit: BoxFit.cover,
+                )
+                    : YoutubePlayer(
+                  controller: _controller,
+                  showVideoProgressIndicator: true,
+                  progressIndicatorColor: maincolor,
                 ),
               ),
               bottom: PreferredSize(
@@ -53,7 +147,7 @@ class _RecipeState extends State<Recipe> {
                       topLeft: Radius.circular(70),
                       topRight: Radius.circular(70),
                     ),
-                    color: Colors.white,
+                    color: background,
                   ),
                   child: Column(
                     children: [
@@ -61,7 +155,7 @@ class _RecipeState extends State<Recipe> {
                       Container(
                         width: 80,
                         height: 4,
-                        color: font,
+                        color: Colors.grey,
                       )
                     ],
                   ),
@@ -73,10 +167,14 @@ class _RecipeState extends State<Recipe> {
                   child: CircleAvatar(
                     backgroundColor: Color.fromRGBO(250, 250, 250, 0.6),
                     radius: 18,
-                    child: Icon(
-                      Icons.favorite_border,
-                      size: 25,
-                      color: font,
+                    child: IconButton(
+                      padding: EdgeInsets.only(right: 0), // Adjusted padding
+                      icon: Icon(
+                        _isFavorite ? Icons.favorite : Icons.favorite_border,
+                        size: 25,
+                        color: Colors.red,
+                      ),
+                      onPressed: toggleFavorite,
                     ),
                   ),
                 ),
@@ -100,187 +198,112 @@ class _RecipeState extends State<Recipe> {
               ),
             ),
             SliverToBoxAdapter(
-              child: _getbody(),
-            )
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      _recipe['recipeName'],
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: font,
+                      ),
+                    ),
+                  ),
+                  _buildEditableSection(
+                    title: 'Ingredients',
+                    controller: _ingredientsController,
+                  ),
+                  _buildEditableSection(
+                    title: 'Instructions',
+                    controller: _instructionsController,
+                  ),
+                  if (_isEditing)
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ElevatedButton(
+                        onPressed: saveChanges,
+                        child: Text('Save Changes'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: maincolor,
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ElevatedButton(
+                      onPressed: deleteRecipe,
+                      child: Text(
+                        'Delete Recipe',
+                        style: TextStyle(
+                          color: Colors.white, // Make the text white
+                          fontWeight: FontWeight.bold, // Make the text bold
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _getbody() {
-    return Wrap(
-        children: [
-        Container(
-        width: double.infinity,
-        color: Colors.white,
-        child: Column(
-          children: [
-          Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Container(
-              width: 33,
-              height: 33,
-              child: Image.asset('images/flash.png'),
-            ),
-            Container(
-              width: 33,
-              height: 33,
-              child: Image.asset('images/meat.png'),
-            ),
-            Container(
-              width: 33,
-              height: 33,
-              child: Image.asset('images/calories.png'),
-            ),
-            Container(
-              width: 33,
-              height: 33,
-              child: Image.asset('images/star.png'),
-            ),
-          ],
-        ),
-        SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Text(
-              '120',
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey,
-                fontFamily: 'ro',
-              ),
-            ),
-            Text(
-              '150',
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey,
-                fontFamily: 'ro',
-              ),
-            ),
-            Text(
-              '10',
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey,
-                fontFamily: 'ro',
-              ),
-            ),
-            Text(
-              '4.4',
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey,
-                fontFamily: 'ro',
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 20),
+  Widget _buildEditableSection({
+    required String title,
+    required TextEditingController controller,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Padding(
-          padding: const EdgeInsets.only(left: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Ingredients',
+                title,
                 style: TextStyle(
                   fontSize: 20,
+                  fontWeight: FontWeight.bold,
                   color: font,
-                  fontFamily: 'ro',
                 ),
               ),
-              Spacer(),
               IconButton(
-                icon: Icon(
-                  _isEditingIngredients ? Icons.save : Icons.edit,
-                  color: font,
-                ),
-                onPressed: () {
-                  setState(() {
-                    _isEditingIngredients = !_isEditingIngredients;
-                  });
-                },
+                icon: Icon(_isEditing ? Icons.save : Icons.edit),
+                onPressed: _isEditing ? saveChanges : toggleEdit,
+                color: font,
               ),
             ],
           ),
         ),
-        Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-    child: _isEditingIngredients
-    ? TextField(
-    controller: _ingredientsController,
-    maxLines: null,
-    decoration: InputDecoration(
-      border: InputBorder.none,
-      hintText: '1 ekor ayam kampung/n1 ruas jahe, geprek/nBumbu ungkep :/n4 siung bawang merah/n2 siung bawang putih/n2 buah kemiri/n1 sdt ketumbar /n1/2 sdt merica /n1 ruas jahe /n1 ruas kunyit /n3 sdm gula merah sisir /n7 sdm kecap manis /n2 daun salam /nsecukupnya Garam & kaldu bubuk',
-    ),
-    )
-        : Text(
-      _ingredientsController.text,
-      style: TextStyle(
-        fontSize: 18,
-        color: font,
-        fontFamily: 'ro',
-        fontWeight: FontWeight.w500,
-      ),
-    ),
-        ),
-            SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.only(left: 15),
-              child: Row(
-                children: [
-                  Text(
-                    'Recipe',
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: font,
-                      fontFamily: 'ro',
-                    ),
-                  ),
-                  Spacer(),
-                  IconButton(
-                    icon: Icon(
-                      _isEditingRecipe ? Icons.save : Icons.edit,
-                      color: font,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _isEditingRecipe = !_isEditingRecipe;
-                      });
-                    },
-                  ),
-                ],
+        if (_isEditing)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: TextField(
+              controller: controller,
+              maxLines: null,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-              child: _isEditingRecipe
-                  ? TextField(
-                controller: _recipeDetailsController,
-                maxLines: null,
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  hintText: 'Enter recipe details',
-                ),
-              )
-                  : Text(
-                _recipeDetailsController.text,
-                style: TextStyle(
-                  fontSize: 18,
-                  color: font,
-                  fontFamily: 'ro',
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              controller.text,
+              style: TextStyle(color: font),
             ),
-          ],
-        ),
-        ),
-        ],
+          ),
+      ],
     );
   }
 }

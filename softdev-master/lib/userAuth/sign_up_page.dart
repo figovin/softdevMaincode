@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:recipe/consent/navigation.dart';
@@ -15,6 +16,7 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   final FirebaseAuthService _auth = FirebaseAuthService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   TextEditingController _usernameController = TextEditingController();
   TextEditingController _emailController = TextEditingController();
@@ -77,13 +79,12 @@ class _SignUpPageState extends State<SignUpPage> {
               GestureDetector(
                 onTap:  (){
                   _signUp();
-
                 },
                 child: Container(
                   width: double.infinity,
                   height: 45,
                   decoration: BoxDecoration(
-                    color: Colors.red,
+                    color: Colors.pinkAccent,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
@@ -115,7 +116,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       child: Text(
                         "Login",
                         style: TextStyle(
-                            color: Colors.redAccent, fontWeight: FontWeight.bold),
+                            color: Colors.pink, fontWeight: FontWeight.bold),
                       ))
                 ],
               )
@@ -127,7 +128,6 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   void _signUp() async {
-
     setState(() {
       isSigningUp = true;
     });
@@ -138,17 +138,21 @@ class _SignUpPageState extends State<SignUpPage> {
 
     User? user = await _auth.signUpWithEmailAndPassword(email, password);
 
-    setState(() {
-      isSigningUp = false;
-    });
     if (user != null) {
+      await _firestore.collection('userdata').doc(user.uid).set({
+        'username': username,
+        'email': email,
+      });
       showToast(message: "User is successfully created");
       Navigator.of(context).push(
           MaterialPageRoute(
-              builder: ((context) =>
-                  Navigation())));
+              builder: ((context) => Navigation())));
     } else {
-      showToast(message: "Some error happend");
+      showToast(message: "Some error happened");
     }
+
+    setState(() {
+      isSigningUp = false;
+    });
   }
 }

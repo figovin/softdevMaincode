@@ -3,23 +3,82 @@ import 'package:flutter/material.dart';
 import 'package:recipe/consent/appbar.dart';
 import 'package:recipe/consent/colors.dart';
 import 'package:recipe/screen/recipe.dart';
-import 'package:recipe/userAuth/toast.dart';
 
-class Home extends StatefulWidget {
-  const Home({Key? key}) : super(key: key);
+class Category extends StatelessWidget {
+  const Category({Key? key});
 
-  @override
-  State<Home> createState() => _HomeState();
-}
-
-class _HomeState extends State<Home> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
-      appBar: CustomAppBar(), // Pass the context to the appbar function
+      appBar: CustomAppBar(),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisExtent: 270,
+            ),
+            itemCount: 6,
+            itemBuilder: (context, index) {
+              final categories = [
+                'Betawi',
+                'Sunda',
+                'Padang',
+                'Bali',
+                'Chinese',
+                'Other'
+              ];
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => CategoryPage(categoryName: categories[index])),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.amber,
+                      borderRadius: BorderRadius.circular(25),
+                      image: DecorationImage(
+                        image: AssetImage('images/${index + 1}c.jpg'),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        categories[index],
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24, // Increased font size
+                          fontWeight: FontWeight.bold, // Added bold font weight
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CategoryPage extends StatelessWidget {
+  final String categoryName;
+
+  CategoryPage({required this.categoryName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(categoryName), backgroundColor: Colors.pink),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('recipes').snapshots(),
+        stream: FirebaseFirestore.instance.collection('recipes').where('category', isEqualTo: categoryName).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
@@ -28,28 +87,11 @@ class _HomeState extends State<Home> {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(child: Text('No recipes found.'));
+            return Center(child: Text('No recipes found in this category.'));
           }
           var recipes = snapshot.data!.docs;
           return CustomScrollView(
             slivers: [
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: 15, vertical: 20),
-                sliver: SliverToBoxAdapter(
-                  child: Row(
-                    children: [
-                      Text(
-                        'All Recipe',
-                        style: TextStyle(
-                          fontSize: 24, // Increased font size
-                          color: font,
-                          fontFamily: 'ro',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: 15, vertical: 20),
                 sliver: SliverGrid(
@@ -92,9 +134,7 @@ class _HomeState extends State<Home> {
                                   children: [
                                     GestureDetector(
                                       onTap: () {
-                                        setState(() {
-                                          toggleFavorite(recipe.id);
-                                        });
+                                        // Toggle favorite functionality
                                       },
                                       child: Icon(
                                         isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -110,21 +150,11 @@ class _HomeState extends State<Home> {
                                   height: 120,
                                   width: 120,
                                   decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: FittedBox(
+                                    image: DecorationImage(
+                                      image: NetworkImage(thumbnailUrl),
                                       fit: BoxFit.cover,
-                                      child: Image.network(
-                                        thumbnailUrl,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Image.asset(
-                                            'images/nofood.png', // Updated fallback image path
-                                          );
-                                        },
-                                      ),
                                     ),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
                                 ),
                               ),
@@ -171,13 +201,5 @@ class _HomeState extends State<Home> {
         },
       ),
     );
-  }
-
-  void toggleFavorite(String recipeId) async {
-    var recipeRef = FirebaseFirestore.instance.collection('recipes').doc(recipeId);
-    var recipe = await recipeRef.get();
-    await recipeRef.update({
-      'favoriteState': !recipe['favoriteState'],
-    });
   }
 }
